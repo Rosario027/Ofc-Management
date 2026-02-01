@@ -1,16 +1,24 @@
 import { useTasks } from "@/hooks/use-tasks";
 import { useAttendance } from "@/hooks/use-attendance";
+import { useLeaves } from "@/hooks/use-leaves";
+import { useExpenses } from "@/hooks/use-expenses";
+import { useSummaries } from "@/hooks/use-summaries";
 import { useCurrentUser } from "@/hooks/use-users";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle, Clock, Calendar, AlertCircle } from "lucide-react";
-import { format } from "date-fns";
+import { CheckCircle, Clock, Calendar, AlertCircle, TrendingUp, FileText, Wallet } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { Link } from "wouter";
+import { Loader2 } from "lucide-react";
 
 export default function StaffDashboard() {
   const { data: user } = useCurrentUser();
-  const { data: tasks } = useTasks();
+  const { data: tasks, isLoading: tasksLoading } = useTasks();
   const { data: attendance } = useAttendance();
+  const { data: leaves } = useLeaves();
+  const { data: expenses } = useExpenses();
+  const { data: summaries } = useSummaries();
 
   // Filter tasks assigned to current user
   const myTasks = tasks?.filter(t => t.assignedToId === user?.id) || [];
@@ -21,6 +29,27 @@ export default function StaffDashboard() {
   const completedCount = myTasks.filter(t => t.status === "completed").length;
   const inProgressCount = myTasks.filter(t => t.status === "in_progress").length;
   const pendingCount = myTasks.filter(t => t.status === "pending").length;
+
+  // Leaves stats
+  const pendingLeaves = leaves?.filter(l => l.userId === user?.id && l.status === "pending").length || 0;
+
+  // Expenses stats
+  const pendingExpenses = expenses?.filter(e => e.userId === user?.id && e.status === "pending").length || 0;
+
+  // Monthly summary
+  const currentMonth = new Date().getMonth() + 1;
+  const currentYear = new Date().getFullYear();
+  const currentSummary = summaries?.find(s => s.userId === user?.id && s.month === currentMonth && s.year === currentYear);
+
+  const isLoading = tasksLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -64,14 +93,14 @@ export default function StaffDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="bg-primary text-primary-foreground shadow-lg shadow-primary/20">
+        <Card className="shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-primary-foreground/90">Today's Status</CardTitle>
-            <Calendar className="h-4 w-4 text-white" />
+            <CardTitle className="text-sm font-medium text-muted-foreground">Pending Requests</CardTitle>
+            <FileText className="h-4 w-4 text-violet-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold capitalize">Present</div>
-            <p className="text-xs text-primary-foreground/80 mt-1">{format(new Date(), "EEEE, MMM d")}</p>
+            <div className="text-2xl font-bold">{pendingLeaves + pendingExpenses}</div>
+            <p className="text-xs text-muted-foreground mt-1">Leaves & Expenses</p>
           </CardContent>
         </Card>
       </div>
@@ -95,7 +124,7 @@ export default function StaffDashboard() {
                         <p className="font-semibold text-foreground">{task.title}</p>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <StatusBadge status={task.priority} variant="outline" />
-                          <span>Due {format(new Date(task.dueDate!), "MMM d, yyyy")}</span>
+                          <span>Due {format(parseISO(task.dueDate!), "MMM d, yyyy")}</span>
                         </div>
                       </div>
                       <StatusBadge status={task.status} />
@@ -103,35 +132,80 @@ export default function StaffDashboard() {
                   ))}
                 </div>
               )}
-              <Button variant="outline" className="w-full mt-4" onClick={() => window.location.href = "/tasks"}>
-                View All Tasks
-              </Button>
+              <Link href="/tasks">
+                <Button variant="outline" className="w-full mt-4">View All Tasks</Button>
+              </Link>
+            </CardContent>
+          </Card>
+
+          {/* Monthly Summary */}
+          <Card className="border-none shadow-md">
+            <CardHeader>
+              <CardTitle>Monthly Summary</CardTitle>
+              <CardDescription>Your performance overview for {format(new Date(), "MMMM yyyy")}.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {currentSummary ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="p-4 bg-muted/30 rounded-xl text-center">
+                    <p className="text-2xl font-bold text-primary">{currentSummary.totalTasks}</p>
+                    <p className="text-xs text-muted-foreground">Total Tasks</p>
+                  </div>
+                  <div className="p-4 bg-muted/30 rounded-xl text-center">
+                    <p className="text-2xl font-bold text-emerald-500">{currentSummary.completedTasks}</p>
+                    <p className="text-xs text-muted-foreground">Completed</p>
+                  </div>
+                  <div className="p-4 bg-muted/30 rounded-xl text-center">
+                    <p className="text-2xl font-bold text-blue-500">{currentSummary.attendanceDays}</p>
+                    <p className="text-xs text-muted-foreground">Present Days</p>
+                  </div>
+                  <div className="p-4 bg-muted/30 rounded-xl text-center">
+                    <p className="text-2xl font-bold text-violet-500">${Number(currentSummary.totalExpenses).toFixed(0)}</p>
+                    <p className="text-xs text-muted-foreground">Expenses</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No summary data available yet.
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Quick Actions / Attendance */}
+        {/* Quick Actions */}
         <div className="space-y-6">
           <Card className="h-full border-none shadow-md">
-             <CardHeader>
-               <CardTitle>Attendance</CardTitle>
-               <CardDescription>Log your work hours.</CardDescription>
-             </CardHeader>
-             <CardContent className="space-y-4">
-               <div className="p-4 rounded-xl bg-muted/50 border border-border flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Check In</p>
-                    <p className="text-lg font-bold">09:00 AM</p>
-                  </div>
-                  <div className="h-8 w-px bg-border mx-2"></div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Check Out</p>
-                    <p className="text-lg font-bold">--:--</p>
-                  </div>
-               </div>
-               <Button className="w-full" size="lg" disabled>Checked In</Button>
-               <Button variant="outline" className="w-full" onClick={() => window.location.href = "/attendance"}>View History</Button>
-             </CardContent>
+            <CardHeader>
+              <CardTitle>Quick Actions</CardTitle>
+              <CardDescription>Common tasks at a glance.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Link href="/tasks">
+                <Button variant="outline" className="w-full justify-start gap-2">
+                  <Clock className="w-4 h-4" />
+                  View My Tasks
+                </Button>
+              </Link>
+              <Link href="/attendance">
+                <Button variant="outline" className="w-full justify-start gap-2">
+                  <Calendar className="w-4 h-4" />
+                  Mark Attendance
+                </Button>
+              </Link>
+              <Link href="/leaves">
+                <Button variant="outline" className="w-full justify-start gap-2">
+                  <FileText className="w-4 h-4" />
+                  Request Leave
+                </Button>
+              </Link>
+              <Link href="/expenses">
+                <Button variant="outline" className="w-full justify-start gap-2">
+                  <Wallet className="w-4 h-4" />
+                  Submit Expense
+                </Button>
+              </Link>
+            </CardContent>
           </Card>
         </div>
       </div>

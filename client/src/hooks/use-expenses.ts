@@ -1,6 +1,20 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
-import type { CreateExpenseRequest } from "@shared/schema";
+import type { InsertExpense, Expense } from "@shared/schema";
+
+export interface ExpenseWithUser extends Expense {
+  user?: {
+    id: number;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+  approvedBy?: {
+    id: number;
+    firstName: string;
+    lastName: string;
+  } | null;
+}
 
 export function useExpenses() {
   return useQuery({
@@ -8,7 +22,7 @@ export function useExpenses() {
     queryFn: async () => {
       const res = await fetch(api.expenses.list.path, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch expenses");
-      return api.expenses.list.responses[200].parse(await res.json());
+      return res.json() as Promise<ExpenseWithUser[]>;
     },
   });
 }
@@ -16,7 +30,7 @@ export function useExpenses() {
 export function useCreateExpense() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: CreateExpenseRequest) => {
+    mutationFn: async (data: InsertExpense) => {
       const res = await fetch(api.expenses.create.path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -28,7 +42,7 @@ export function useCreateExpense() {
         const error = await res.json();
         throw new Error(error.message || "Failed to create expense request");
       }
-      return api.expenses.create.responses[201].parse(await res.json());
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.expenses.list.path] });
@@ -51,7 +65,7 @@ export function useUpdateExpenseStatus() {
       if (!res.ok) {
         throw new Error("Failed to update expense status");
       }
-      return api.expenses.updateStatus.responses[200].parse(await res.json());
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.expenses.list.path] });

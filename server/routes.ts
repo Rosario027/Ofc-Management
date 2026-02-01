@@ -1,73 +1,163 @@
 import type { Express } from "express";
 import type { Server } from "http";
-import { storage } from "./storage";
+import { storage, verifyPassword } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
-import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
-import { authStorage } from "./replit_integrations/auth/storage";
+import session from "express-session";
+import connectPg from "connect-pg-simple";
+import { pool } from "./db";
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
-  // Setup Auth
-  await setupAuth(app);
-  registerAuthRoutes(app);
+// Extend express session
+declare module "express-session" {
+  interface SessionData {
+    userId?: number;
+  }
+}
+
+const pgStore = connectPg(session);
+
+export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  // Setup session
+  app.use(session({
+    store: new pgStore({
+      pool,
+      tableName: "sessions",
+      createTableIfMissing: true,
+    }),
+    secret: process.env.SESSION_SECRET || "your-secret-key-change-in-production",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
+    },
+  }));
 
   // Helper to ensure auth
   const requireAuth = (req: any, res: any, next: any) => {
-    if (req.isAuthenticated()) return next();
+    if (req.session?.userId) return next();
     res.status(401).json({ message: "Unauthorized" });
   };
 
-  // Helper to get enriched user data
-  async function getEnrichedUser(userId: string) {
-    const user = await authStorage.getUser(userId);
-    let role = await storage.getUserRole(userId);
-
-    // If no role exists, check if this is the first user
-    if (!role) {
-      const allRoles = await storage.getAllUserRoles();
-      const isFirstUser = allRoles.length === 0;
-      
-      role = await storage.assignUserRole({
-        userId,
-        role: isFirstUser ? "admin" : "staff",
-        department: "General",
-        title: isFirstUser ? "Administrator" : "Staff Member"
-      });
+  // Helper to check admin/proprietor role
+  const requireAdmin = async (req: any, res: any, next: any) => {
+    if (!req.session?.userId) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
+    const user = await storage.getUser(req.session.userId);
+    if (!user || (user.role !== "admin" && user.role !== "proprietor")) {
+      return res.status(403).json({ message: "Forbidden - Admin access required" });
+    }
+    next();
+  };
 
-    return {
-      ...user,
-      role: role?.role || "staff", // Default to staff
-      department: role?.department,
-      title: role?.title
-    };
-  }
+  // === AUTH ROUTES ===
+  app.post(api.auth.login.path, async (req, res) => {
+    try {
+      const { email, password } = api.auth.login.input.parse(req.body);
+      const user = await storage.getUserByEmail(email);
+      
+      if (!user || !await verifyPassword(password, user.password)) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
 
-  // API Routes
+      if (!user.isActive) {
+        return res.status(401).json({ message: "Account is deactivated" });
+      }
 
-  // Tasks
+      req.session.userId = user.id;
+      
+      res.json({
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        organizationId: user.organizationId,
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.post(api.auth.logout.path, (req, res) => {
+    req.session?.destroy(() => {
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+
+  app.get(api.auth.me.path, requireAuth, async (req, res) => {
+    const user = await storage.getUser(req.session!.userId!);
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+    res.json({
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      profileImageUrl: user.profileImageUrl,
+      role: user.role,
+      department: user.department,
+      title: user.title,
+      organizationId: user.organizationId,
+      isActive: user.isActive,
+    });
+  });
+
+  // === ORGANIZATION ROUTES ===
+  app.get(api.organizations.list.path, requireAuth, async (req, res) => {
+    const orgs = await storage.getOrganizations();
+    res.json(orgs);
+  });
+
+  app.post(api.organizations.create.path, requireAuth, async (req, res) => {
+    try {
+      const input = api.organizations.create.input.parse(req.body);
+      const org = await storage.createOrganization(input);
+      res.status(201).json(org);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.get(api.organizations.get.path, requireAuth, async (req, res) => {
+    const org = await storage.getOrganization(Number(req.params.id));
+    if (!org) return res.status(404).json({ message: "Organization not found" });
+    res.json(org);
+  });
+
+  app.patch(api.organizations.update.path, requireAdmin, async (req, res) => {
+    try {
+      const org = await storage.updateOrganization(Number(req.params.id), req.body);
+      res.json(org);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  // === TASK ROUTES ===
   app.get(api.tasks.list.path, requireAuth, async (req, res) => {
-    const userId = (req.user as any).claims.sub;
-    const enrichedUser = await getEnrichedUser(userId);
+    const userId = req.session!.userId!;
+    const user = await storage.getUser(userId);
     
     let tasks;
-    if (enrichedUser.role === "admin" || enrichedUser.role === "proprietor") {
-      tasks = await storage.getTasks();
+    if (user?.role === "admin" || user?.role === "proprietor") {
+      tasks = user.organizationId 
+        ? await storage.getTasksByOrganization(user.organizationId)
+        : await storage.getTasks();
     } else {
       tasks = await storage.getTasksByUserId(userId);
     }
     
-    // Enrich tasks with assignee names (simplified, ideally join in storage)
-    const enrichedTasks = await Promise.all(tasks.map(async (task) => {
-      const assignee = await getEnrichedUser(task.assignedToId);
-      const assigner = await getEnrichedUser(task.assignedById);
-      return { ...task, assignee, assigner };
-    }));
-
-    res.json(enrichedTasks);
+    res.json(tasks);
   });
 
   app.get(api.tasks.get.path, requireAuth, async (req, res) => {
@@ -76,7 +166,7 @@ export async function registerRoutes(
     res.json(task);
   });
 
-  app.post(api.tasks.create.path, requireAuth, async (req, res) => {
+  app.post(api.tasks.create.path, requireAdmin, async (req, res) => {
     try {
       const input = api.tasks.create.input.parse(req.body);
       const task = await storage.createTask(input);
@@ -91,8 +181,21 @@ export async function registerRoutes(
 
   app.patch(api.tasks.update.path, requireAuth, async (req, res) => {
     try {
-      const input = api.tasks.update.input.parse(req.body);
-      const task = await storage.updateTask(Number(req.params.id), input);
+      const userId = req.session!.userId!;
+      const taskId = Number(req.params.id);
+      const existingTask = await storage.getTask(taskId);
+      
+      if (!existingTask) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+
+      const user = await storage.getUser(userId);
+      // Staff can only update their own tasks, admins can update any
+      if (user?.role === "staff" && existingTask.assignedToId !== userId) {
+        return res.status(403).json({ message: "Can only update your own tasks" });
+      }
+
+      const task = await storage.updateTask(taskId, req.body);
       res.json(task);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -102,21 +205,27 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.tasks.delete.path, requireAuth, async (req, res) => {
+  app.delete(api.tasks.delete.path, requireAdmin, async (req, res) => {
     await storage.deleteTask(Number(req.params.id));
     res.status(204).send();
   });
 
-  // Attendance
+  // === ATTENDANCE ROUTES ===
   app.get(api.attendance.list.path, requireAuth, async (req, res) => {
-    const userId = (req.user as any).claims.sub;
-    const enrichedUser = await getEnrichedUser(userId);
+    const userId = req.session!.userId!;
+    const user = await storage.getUser(userId);
     
-    if (enrichedUser.role === "admin" || enrichedUser.role === "proprietor") {
-      res.json(await storage.getAttendance());
+    let attendance;
+    if (user?.role === "admin" || user?.role === "proprietor") {
+      attendance = user.organizationId
+        ? await storage.getAttendanceByOrganization(user.organizationId)
+        : await storage.getAttendance();
     } else {
-      res.json(await storage.getAttendanceByUserId(userId));
+      const userAttendance = await storage.getAttendanceByUserId(userId);
+      attendance = userAttendance.map(a => ({ ...a, user }));
     }
+    
+    res.json(attendance);
   });
 
   app.post(api.attendance.mark.path, requireAuth, async (req, res) => {
@@ -132,24 +241,31 @@ export async function registerRoutes(
     }
   });
 
-  // Leaves
+  app.patch(api.attendance.update.path, requireAdmin, async (req, res) => {
+    try {
+      const record = await storage.updateAttendance(Number(req.params.id), req.body);
+      res.json(record);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  // === LEAVES ROUTES ===
   app.get(api.leaves.list.path, requireAuth, async (req, res) => {
-    const userId = (req.user as any).claims.sub;
-    const enrichedUser = await getEnrichedUser(userId);
+    const userId = req.session!.userId!;
+    const user = await storage.getUser(userId);
     
     let leaves;
-    if (enrichedUser.role === "admin" || enrichedUser.role === "proprietor") {
-      leaves = await storage.getLeaves();
+    if (user?.role === "admin" || user?.role === "proprietor") {
+      leaves = user.organizationId
+        ? await storage.getLeavesByOrganization(user.organizationId)
+        : await storage.getLeaves();
     } else {
-      leaves = await storage.getLeavesByUserId(userId);
+      const userLeaves = await storage.getLeavesByUserId(userId);
+      leaves = userLeaves.map(l => ({ ...l, user }));
     }
-
-    const enrichedLeaves = await Promise.all(leaves.map(async (leave) => {
-      const user = await getEnrichedUser(leave.userId);
-      return { ...leave, user };
-    }));
     
-    res.json(enrichedLeaves);
+    res.json(leaves);
   });
 
   app.post(api.leaves.create.path, requireAuth, async (req, res) => {
@@ -165,30 +281,33 @@ export async function registerRoutes(
     }
   });
 
-  app.patch(api.leaves.updateStatus.path, requireAuth, async (req, res) => {
-    const status = req.body.status;
-    const leave = await storage.updateLeaveStatus(Number(req.params.id), status);
-    res.json(leave);
+  app.patch(api.leaves.updateStatus.path, requireAdmin, async (req, res) => {
+    try {
+      const { status } = req.body;
+      const approvedById = req.session!.userId;
+      const leave = await storage.updateLeaveStatus(Number(req.params.id), status, approvedById);
+      res.json(leave);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
   });
 
-  // Expenses
+  // === EXPENSES ROUTES ===
   app.get(api.expenses.list.path, requireAuth, async (req, res) => {
-    const userId = (req.user as any).claims.sub;
-    const enrichedUser = await getEnrichedUser(userId);
+    const userId = req.session!.userId!;
+    const user = await storage.getUser(userId);
     
     let expenses;
-    if (enrichedUser.role === "admin" || enrichedUser.role === "proprietor") {
-      expenses = await storage.getExpenses();
+    if (user?.role === "admin" || user?.role === "proprietor") {
+      expenses = user.organizationId
+        ? await storage.getExpensesByOrganization(user.organizationId)
+        : await storage.getExpenses();
     } else {
-      expenses = await storage.getExpensesByUserId(userId);
+      const userExpenses = await storage.getExpensesByUserId(userId);
+      expenses = userExpenses.map(e => ({ ...e, user }));
     }
-
-    const enrichedExpenses = await Promise.all(expenses.map(async (expense) => {
-      const user = await getEnrichedUser(expense.userId);
-      return { ...expense, user };
-    }));
     
-    res.json(enrichedExpenses);
+    res.json(expenses);
   });
 
   app.post(api.expenses.create.path, requireAuth, async (req, res) => {
@@ -204,32 +323,32 @@ export async function registerRoutes(
     }
   });
 
-  app.patch(api.expenses.updateStatus.path, requireAuth, async (req, res) => {
-    const status = req.body.status;
-    const expense = await storage.updateExpenseStatus(Number(req.params.id), status);
-    res.json(expense);
-  });
-
-  // Users
-  app.get(api.users.list.path, requireAuth, async (req, res) => {
-    const roles = await storage.getAllUserRoles();
-    // In a real app we'd join with auth users table. For now we fetch roles and enrich.
-    // Note: We can't list ALL auth users easily without a separate query if they haven't logged in?
-    // Actually Replit Auth storage only stores users who have logged in.
-    // We can iterate over userRoles or query db directly if needed.
-    // For MVP, let's just return the roles which contain userId.
-    const enrichedUsers = await Promise.all(roles.map(async (role) => {
-      const user = await authStorage.getUser(role.userId);
-      return { ...user, ...role };
-    }));
-    res.json(enrichedUsers);
-  });
-
-  app.post(api.users.assignRole.path, requireAuth, async (req, res) => {
+  app.patch(api.expenses.updateStatus.path, requireAdmin, async (req, res) => {
     try {
-      const input = api.users.assignRole.input.parse(req.body);
-      const role = await storage.assignUserRole(input);
-      res.json(role);
+      const { status } = req.body;
+      const approvedById = req.session!.userId;
+      const expense = await storage.updateExpenseStatus(Number(req.params.id), status, approvedById);
+      res.json(expense);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  // === USERS ROUTES ===
+  app.get(api.users.list.path, requireAdmin, async (req, res) => {
+    const users = await storage.getUsers();
+    const usersWithOrgs = await Promise.all(users.map(async (user) => {
+      const org = user.organizationId ? await storage.getOrganization(user.organizationId) : null;
+      return { ...user, password: undefined, organization: org };
+    }));
+    res.json(usersWithOrgs);
+  });
+
+  app.post(api.users.create.path, requireAdmin, async (req, res) => {
+    try {
+      const input = api.users.create.input.parse(req.body);
+      const user = await storage.createUser(input);
+      res.status(201).json({ ...user, password: undefined });
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0].message });
@@ -238,11 +357,123 @@ export async function registerRoutes(
     }
   });
 
-  app.get(api.users.me.path, requireAuth, async (req, res) => {
-    const userId = (req.user as any).claims.sub;
-    const enrichedUser = await getEnrichedUser(userId);
-    res.json(enrichedUser);
+  app.patch(api.users.update.path, requireAdmin, async (req, res) => {
+    try {
+      const user = await storage.updateUser(Number(req.params.id), req.body);
+      res.json({ ...user, password: undefined });
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
   });
+
+  app.delete(api.users.delete.path, requireAdmin, async (req, res) => {
+    await storage.deleteUser(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // === SUMMARIES ROUTES ===
+  app.get(api.summaries.get.path, requireAuth, async (req, res) => {
+    const userId = req.session!.userId!;
+    const user = await storage.getUser(userId);
+    
+    let summaries;
+    if (user?.role === "admin" || user?.role === "proprietor") {
+      summaries = await storage.getMonthlySummaries();
+    } else {
+      summaries = await storage.getMonthlySummariesByUser(userId);
+    }
+    
+    // Enrich with user data
+    const enrichedSummaries = await Promise.all(summaries.map(async (summary) => {
+      const summaryUser = await storage.getUser(summary.userId);
+      return { ...summary, user: summaryUser ? { ...summaryUser, password: undefined } : null };
+    }));
+    
+    res.json(enrichedSummaries);
+  });
+
+  app.get(api.summaries.getByUser.path, requireAuth, async (req, res) => {
+    const summaries = await storage.getMonthlySummariesByUser(Number(req.params.userId));
+    res.json(summaries);
+  });
+
+  app.post(api.summaries.generate.path, requireAdmin, async (req, res) => {
+    try {
+      const { month, year } = req.body;
+      const allUsers = await storage.getUsers();
+      
+      for (const user of allUsers) {
+        // Calculate task stats
+        const userTasks = await storage.getTasksByUserId(user.id);
+        const totalTasks = userTasks.length;
+        const completedTasks = userTasks.filter(t => t.status === "completed").length;
+        const inProgressTasks = userTasks.filter(t => t.status === "in_progress").length;
+        const pendingTasks = userTasks.filter(t => t.status === "pending").length;
+
+        // Calculate attendance stats
+        const userAttendance = await storage.getAttendanceByUserId(user.id);
+        const monthAttendance = userAttendance.filter(a => {
+          const date = new Date(a.date);
+          return date.getMonth() + 1 === month && date.getFullYear() === year;
+        });
+        const attendanceDays = monthAttendance.filter(a => a.status === "present").length;
+        const leaveDays = monthAttendance.filter(a => a.status === "leave").length;
+
+        // Calculate expenses
+        const userExpenses = await storage.getExpensesByUserId(user.id);
+        const monthExpenses = userExpenses.filter(e => {
+          const date = new Date(e.date);
+          return date.getMonth() + 1 === month && date.getFullYear() === year && e.status === "approved";
+        });
+        const totalExpenses = monthExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+
+        // Check if summary exists
+        const existingSummary = await storage.getMonthlySummary(user.id, month, year);
+        
+        const summaryData = {
+          userId: user.id,
+          month,
+          year,
+          totalTasks,
+          completedTasks,
+          inProgressTasks,
+          pendingTasks,
+          attendanceDays,
+          leaveDays,
+          totalExpenses: totalExpenses.toString(),
+          organizationId: user.organizationId,
+        };
+
+        if (existingSummary) {
+          await storage.updateMonthlySummary(existingSummary.id, summaryData);
+        } else {
+          await storage.createMonthlySummary(summaryData);
+        }
+      }
+
+      res.status(201).json({ message: "Monthly summaries generated successfully" });
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  // === SEED DATA ===
+  // Create default admin user if no users exist
+  const existingUsers = await storage.getUsers();
+  if (existingUsers.length === 0) {
+    console.log("Creating default admin user...");
+    await storage.createUser({
+      email: "admin@officesync.com",
+      password: "admin123",
+      firstName: "Admin",
+      lastName: "User",
+      role: "admin",
+      department: "Management",
+      title: "Administrator",
+      isActive: true,
+    });
+    console.log("Default admin created: admin@officesync.com / admin123");
+  }
 
   return httpServer;
 }

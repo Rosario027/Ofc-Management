@@ -3,12 +3,17 @@ import {
   insertTaskSchema, 
   insertAttendanceSchema, 
   insertLeaveSchema, 
-  insertExpenseSchema, 
+  insertExpenseSchema,
+  insertOrganizationSchema,
+  insertUserSchema,
+  loginSchema,
   tasks, 
   attendance, 
   leaves, 
   expenses,
-  userRoles
+  organizations,
+  users,
+  monthlySummaries
 } from './schema';
 
 export const errorSchemas = {
@@ -28,6 +33,85 @@ export const errorSchemas = {
 };
 
 export const api = {
+  auth: {
+    login: {
+      method: 'POST' as const,
+      path: '/api/auth/login',
+      input: loginSchema,
+      responses: {
+        200: z.object({
+          id: z.number(),
+          email: z.string(),
+          firstName: z.string(),
+          lastName: z.string(),
+          role: z.string(),
+          organizationId: z.number().nullable(),
+        }),
+        401: errorSchemas.unauthorized,
+      },
+    },
+    logout: {
+      method: 'POST' as const,
+      path: '/api/auth/logout',
+      responses: {
+        200: z.object({ message: z.string() }),
+      },
+    },
+    me: {
+      method: 'GET' as const,
+      path: '/api/auth/me',
+      responses: {
+        200: z.object({
+          id: z.number(),
+          email: z.string(),
+          firstName: z.string(),
+          lastName: z.string(),
+          profileImageUrl: z.string().nullable(),
+          role: z.string(),
+          department: z.string().nullable(),
+          title: z.string().nullable(),
+          organizationId: z.number().nullable(),
+          isActive: z.boolean(),
+        }),
+        401: errorSchemas.unauthorized,
+      },
+    },
+  },
+  organizations: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/organizations',
+      responses: {
+        200: z.array(z.custom<typeof organizations.$inferSelect>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/organizations',
+      input: insertOrganizationSchema,
+      responses: {
+        201: z.custom<typeof organizations.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    get: {
+      method: 'GET' as const,
+      path: '/api/organizations/:id',
+      responses: {
+        200: z.custom<typeof organizations.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    update: {
+      method: 'PATCH' as const,
+      path: '/api/organizations/:id',
+      input: insertOrganizationSchema.partial(),
+      responses: {
+        200: z.custom<typeof organizations.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+  },
   tasks: {
     list: {
       method: 'GET' as const,
@@ -77,7 +161,7 @@ export const api = {
       method: 'GET' as const,
       path: '/api/attendance',
       responses: {
-        200: z.array(z.custom<typeof attendance.$inferSelect>()),
+        200: z.array(z.custom<typeof attendance.$inferSelect & { user?: any }>()),
       },
     },
     mark: {
@@ -89,13 +173,22 @@ export const api = {
         400: errorSchemas.validation,
       },
     },
+    update: {
+      method: 'PATCH' as const,
+      path: '/api/attendance/:id',
+      input: insertAttendanceSchema.partial(),
+      responses: {
+        200: z.custom<typeof attendance.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
   },
   leaves: {
     list: {
       method: 'GET' as const,
       path: '/api/leaves',
       responses: {
-        200: z.array(z.custom<typeof leaves.$inferSelect & { user?: any }>()),
+        200: z.array(z.custom<typeof leaves.$inferSelect & { user?: any, approvedBy?: any }>()),
       },
     },
     create: {
@@ -110,7 +203,7 @@ export const api = {
     updateStatus: {
       method: 'PATCH' as const,
       path: '/api/leaves/:id/status',
-      input: z.object({ status: z.enum(["pending", "approved", "rejected"]) }),
+      input: z.object({ status: z.enum(["pending", "approved", "rejected"]), approvedById: z.number().optional() }),
       responses: {
         200: z.custom<typeof leaves.$inferSelect>(),
         404: errorSchemas.notFound,
@@ -122,7 +215,7 @@ export const api = {
       method: 'GET' as const,
       path: '/api/expenses',
       responses: {
-        200: z.array(z.custom<typeof expenses.$inferSelect & { user?: any }>()),
+        200: z.array(z.custom<typeof expenses.$inferSelect & { user?: any, approvedBy?: any }>()),
       },
     },
     create: {
@@ -137,7 +230,7 @@ export const api = {
     updateStatus: {
       method: 'PATCH' as const,
       path: '/api/expenses/:id/status',
-      input: z.object({ status: z.enum(["pending", "approved", "rejected"]) }),
+      input: z.object({ status: z.enum(["pending", "approved", "rejected"]), approvedById: z.number().optional() }),
       responses: {
         200: z.custom<typeof expenses.$inferSelect>(),
         404: errorSchemas.notFound,
@@ -149,40 +242,60 @@ export const api = {
       method: 'GET' as const,
       path: '/api/users',
       responses: {
-        200: z.array(z.any()), // Returns users with roles
+        200: z.array(z.custom<typeof users.$inferSelect & { organization?: any }>()),
       },
     },
-    assignRole: {
+    create: {
       method: 'POST' as const,
-      path: '/api/users/role',
-      input: z.object({ 
-        userId: z.string(), 
-        role: z.enum(["admin", "staff", "proprietor"]),
-        department: z.string().optional(),
-        title: z.string().optional()
-      }),
+      path: '/api/users',
+      input: insertUserSchema,
       responses: {
-        200: z.custom<typeof userRoles.$inferSelect>(),
+        201: z.custom<typeof users.$inferSelect>(),
         400: errorSchemas.validation,
       },
     },
-    me: {
-      method: 'GET' as const,
-      path: '/api/users/me',
+    update: {
+      method: 'PATCH' as const,
+      path: '/api/users/:id',
+      input: insertUserSchema.partial(),
       responses: {
-        200: z.object({
-          id: z.string(),
-          email: z.string().nullable(),
-          firstName: z.string().nullable(),
-          lastName: z.string().nullable(),
-          profileImageUrl: z.string().nullable(),
-          role: z.string().nullable(),
-          department: z.string().nullable(),
-          title: z.string().nullable(),
-        }),
-      }
-    }
-  }
+        200: z.custom<typeof users.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/users/:id',
+      responses: {
+        204: z.void(),
+        404: errorSchemas.notFound,
+      },
+    },
+  },
+  summaries: {
+    get: {
+      method: 'GET' as const,
+      path: '/api/summaries',
+      responses: {
+        200: z.array(z.custom<typeof monthlySummaries.$inferSelect & { user?: any }>()),
+      },
+    },
+    getByUser: {
+      method: 'GET' as const,
+      path: '/api/summaries/user/:userId',
+      responses: {
+        200: z.array(z.custom<typeof monthlySummaries.$inferSelect>()),
+      },
+    },
+    generate: {
+      method: 'POST' as const,
+      path: '/api/summaries/generate',
+      input: z.object({ month: z.number(), year: z.number() }),
+      responses: {
+        201: z.object({ message: z.string() }),
+      },
+    },
+  },
 };
 
 export function buildUrl(path: string, params?: Record<string, string | number>): string {

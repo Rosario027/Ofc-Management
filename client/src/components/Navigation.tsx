@@ -1,4 +1,5 @@
 import { useCurrentUser } from "@/hooks/use-users";
+import { useAuth } from "@/hooks/use-auth";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { 
@@ -10,14 +11,18 @@ import {
   Users, 
   Briefcase,
   LogOut,
-  Building2
+  Building2,
+  ClipboardCheck,
+  Settings
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 export function Sidebar() {
   const [location] = useLocation();
   const { data: user } = useCurrentUser();
+  const { logout } = useAuth();
   
   const isAdmin = user?.role === "admin" || user?.role === "proprietor";
 
@@ -33,8 +38,9 @@ export function Sidebar() {
     { href: "/admin", label: "Overview", icon: LayoutDashboard },
     { href: "/admin/tasks", label: "All Tasks", icon: Briefcase },
     { href: "/admin/employees", label: "Employees", icon: Users },
-    { href: "/admin/approvals", label: "Approvals", icon: CheckSquare },
+    { href: "/admin/approvals", label: "Approvals", icon: ClipboardCheck },
     { href: "/admin/attendance", label: "Attendance Log", icon: CalendarClock },
+    { href: "/admin/organizations", label: "Organizations", icon: Building2 },
   ];
 
   const links = isAdmin ? adminLinks : staffLinks;
@@ -54,7 +60,7 @@ export function Sidebar() {
 
       <div className="flex-1 overflow-y-auto py-6 px-4 space-y-1">
         <p className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-          Menu
+          {isAdmin ? "Admin Menu" : "Menu"}
         </p>
         {links.map((link) => {
           const Icon = link.icon;
@@ -65,8 +71,10 @@ export function Sidebar() {
               key={link.href} 
               href={link.href}
               className={cn(
-                "nav-item",
-                isActive ? "nav-item-active" : "nav-item-inactive"
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                isActive 
+                  ? "bg-primary/10 text-primary" 
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
               <Icon className={cn("w-5 h-5", isActive ? "text-primary" : "text-muted-foreground")} />
@@ -80,7 +88,9 @@ export function Sidebar() {
         <div className="flex items-center gap-3 p-2 rounded-lg bg-secondary/50 mb-3">
           <Avatar className="h-9 w-9 border border-border">
             <AvatarImage src={user?.profileImageUrl || undefined} />
-            <AvatarFallback>{user?.firstName?.[0]}{user?.lastName?.[0]}</AvatarFallback>
+            <AvatarFallback className="bg-primary/10 text-primary">
+              {user?.firstName?.[0]}{user?.lastName?.[0]}
+            </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{user?.firstName} {user?.lastName}</p>
@@ -91,7 +101,7 @@ export function Sidebar() {
         <Button 
           variant="outline" 
           className="w-full justify-start text-muted-foreground hover:text-destructive"
-          onClick={() => window.location.href = "/api/logout"}
+          onClick={() => logout()}
         >
           <LogOut className="w-4 h-4 mr-2" />
           Log Out

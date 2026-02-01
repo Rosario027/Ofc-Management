@@ -1,69 +1,148 @@
-import { pgTable, text, serial, integer, boolean, timestamp, varchar, date } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, varchar, date, decimal } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { users } from "./models/auth";
 import { relations } from "drizzle-orm";
 
-// Re-export auth models
-export * from "./models/auth";
+// === ORGANIZATIONS ===
+export const organizations = pgTable("organizations", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").unique().notNull(),
+  address: text("address"),
+  phone: text("phone"),
+  email: text("email"),
+  logoUrl: text("logo_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
 
-// === TABLE DEFINITIONS ===
+// === USERS (Custom Auth) ===
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  email: varchar("email", { length: 255 }).unique().notNull(),
+  password: text("password").notNull(),
+  firstName: varchar("first_name", { length: 100 }).notNull(),
+  lastName: varchar("last_name", { length: 100 }).notNull(),
+  profileImageUrl: text("profile_image_url"),
+  role: text("role", { enum: ["admin", "proprietor", "staff"] }).default("staff").notNull(),
+  department: text("department"),
+  title: text("title"),
+  organizationId: integer("organization_id").references(() => organizations.id),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
 
+// === SESSIONS ===
+export const sessions = pgTable("sessions", {
+  id: text("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// === TASKS ===
 export const tasks = pgTable("tasks", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   description: text("description"),
-  assignedToId: varchar("assigned_to_id").notNull(), // references users.id
-  assignedById: varchar("assigned_by_id").notNull(), // references users.id
-  status: text("status", { enum: ["pending", "in_progress", "completed"] }).default("pending").notNull(),
+  assignedToId: integer("assigned_to_id").references(() => users.id).notNull(),
+  assignedById: integer("assigned_by_id").references(() => users.id).notNull(),
+  organizationId: integer("organization_id").references(() => organizations.id),
+  status: text("status", { enum: ["pending", "in_progress", "completed", "reassigned"] }).default("pending").notNull(),
   priority: text("priority", { enum: ["low", "medium", "high", "critical"] }).default("medium").notNull(),
   dueDate: timestamp("due_date"),
   completionLevel: integer("completion_level").default(0).notNull(), // 0-100
+  notes: text("notes"), // For reassignment notes or progress notes
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// === ATTENDANCE ===
 export const attendance = pgTable("attendance", {
   id: serial("id").primaryKey(),
-  userId: varchar("user_id").notNull(), // references users.id
+  userId: integer("user_id").references(() => users.id).notNull(),
   date: date("date").notNull(),
-  status: text("status", { enum: ["present", "absent", "leave"] }).default("present").notNull(),
+  status: text("status", { enum: ["present", "absent", "half_day", "leave"] }).default("present").notNull(),
   checkInTime: timestamp("check_in_time"),
   checkOutTime: timestamp("check_out_time"),
-});
-
-export const leaves = pgTable("leaves", {
-  id: serial("id").primaryKey(),
-  userId: varchar("user_id").notNull(), // references users.id
-  type: text("type", { enum: ["sick", "casual", "vacation", "other"] }).notNull(),
-  startDate: date("start_date").notNull(),
-  endDate: date("end_date").notNull(),
-  reason: text("reason").notNull(),
-  status: text("status", { enum: ["pending", "approved", "rejected"] }).default("pending").notNull(),
+  workHours: decimal("work_hours", { precision: 4, scale: 2 }),
+  notes: text("notes"),
+  organizationId: integer("organization_id").references(() => organizations.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// === LEAVES ===
+export const leaves = pgTable("leaves", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  type: text("type", { enum: ["sick", "casual", "vacation", "emergency", "other"] }).notNull(),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  days: integer("days").notNull(),
+  reason: text("reason").notNull(),
+  status: text("status", { enum: ["pending", "approved", "rejected"] }).default("pending").notNull(),
+  approvedById: integer("approved_by_id").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  organizationId: integer("organization_id").references(() => organizations.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// === EXPENSES ===
 export const expenses = pgTable("expenses", {
   id: serial("id").primaryKey(),
-  userId: varchar("user_id").notNull(), // references users.id
-  amount: integer("amount").notNull(), // stored in cents
+  userId: integer("user_id").references(() => users.id).notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   description: text("description").notNull(),
   date: date("date").notNull(),
   category: text("category").notNull(),
   status: text("status", { enum: ["pending", "approved", "rejected"] }).default("pending").notNull(),
   receiptUrl: text("receipt_url"),
+  approvedById: integer("approved_by_id").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  organizationId: integer("organization_id").references(() => organizations.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Use a simple table to store user roles since we can't easily modify the auth blueprint table
-export const userRoles = pgTable("user_roles", {
+// === MONTHLY SUMMARIES ===
+export const monthlySummaries = pgTable("monthly_summaries", {
   id: serial("id").primaryKey(),
-  userId: varchar("user_id").unique().notNull(),
-  role: text("role", { enum: ["admin", "staff", "proprietor"] }).default("staff").notNull(),
-  department: text("department"),
-  title: text("title"),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  month: integer("month").notNull(),
+  year: integer("year").notNull(),
+  totalTasks: integer("total_tasks").default(0),
+  completedTasks: integer("completed_tasks").default(0),
+  inProgressTasks: integer("in_progress_tasks").default(0),
+  pendingTasks: integer("pending_tasks").default(0),
+  attendanceDays: integer("attendance_days").default(0),
+  leaveDays: integer("leave_days").default(0),
+  totalExpenses: decimal("total_expenses", { precision: 10, scale: 2 }).default("0"),
+  organizationId: integer("organization_id").references(() => organizations.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // === RELATIONS ===
+export const organizationsRelations = relations(organizations, ({ many }) => ({
+  users: many(users),
+  tasks: many(tasks),
+  attendance: many(attendance),
+  leaves: many(leaves),
+  expenses: many(expenses),
+}));
+
+export const usersRelations = relations(users, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [users.organizationId],
+    references: [organizations.id],
+  }),
+  assignedTasks: many(tasks, { relationName: "assignee" }),
+  createdTasks: many(tasks, { relationName: "assigner" }),
+  attendance: many(attendance),
+  leaves: many(leaves),
+  expenses: many(expenses),
+  monthlySummaries: many(monthlySummaries),
+}));
 
 export const tasksRelations = relations(tasks, ({ one }) => ({
   assignee: one(users, {
@@ -76,12 +155,20 @@ export const tasksRelations = relations(tasks, ({ one }) => ({
     references: [users.id],
     relationName: "assigner"
   }),
+  organization: one(organizations, {
+    fields: [tasks.organizationId],
+    references: [organizations.id],
+  }),
 }));
 
 export const attendanceRelations = relations(attendance, ({ one }) => ({
   user: one(users, {
     fields: [attendance.userId],
     references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [attendance.organizationId],
+    references: [organizations.id],
   }),
 }));
 
@@ -90,6 +177,14 @@ export const leavesRelations = relations(leaves, ({ one }) => ({
     fields: [leaves.userId],
     references: [users.id],
   }),
+  approvedBy: one(users, {
+    fields: [leaves.approvedById],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [leaves.organizationId],
+    references: [organizations.id],
+  }),
 }));
 
 export const expensesRelations = relations(expenses, ({ one }) => ({
@@ -97,24 +192,48 @@ export const expensesRelations = relations(expenses, ({ one }) => ({
     fields: [expenses.userId],
     references: [users.id],
   }),
-}));
-
-export const userRolesRelations = relations(userRoles, ({ one }) => ({
-  user: one(users, {
-    fields: [userRoles.userId],
+  approvedBy: one(users, {
+    fields: [expenses.approvedById],
     references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [expenses.organizationId],
+    references: [organizations.id],
   }),
 }));
 
-// === BASE SCHEMAS ===
+export const monthlySummariesRelations = relations(monthlySummaries, ({ one }) => ({
+  user: one(users, {
+    fields: [monthlySummaries.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [monthlySummaries.organizationId],
+    references: [organizations.id],
+  }),
+}));
 
-export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true });
-export const insertAttendanceSchema = createInsertSchema(attendance).omit({ id: true });
-export const insertLeaveSchema = createInsertSchema(leaves).omit({ id: true, createdAt: true, status: true });
-export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true, createdAt: true, status: true });
-export const insertUserRoleSchema = createInsertSchema(userRoles).omit({ id: true });
+// === ZOD SCHEMAS ===
+export const insertOrganizationSchema = createInsertSchema(organizations).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertAttendanceSchema = createInsertSchema(attendance).omit({ id: true, createdAt: true });
+export const insertLeaveSchema = createInsertSchema(leaves).omit({ id: true, createdAt: true, status: true, approvedById: true, approvedAt: true });
+export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true, createdAt: true, status: true, approvedById: true, approvedAt: true });
+export const insertMonthlySummarySchema = createInsertSchema(monthlySummaries).omit({ id: true, createdAt: true, updatedAt: true });
 
-// === EXPLICIT API CONTRACT TYPES ===
+// Login schema
+export const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+});
+
+// === TYPES ===
+export type Organization = typeof organizations.$inferSelect;
+export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
+
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
 
 export type Task = typeof tasks.$inferSelect;
 export type InsertTask = z.infer<typeof insertTaskSchema>;
@@ -128,22 +247,15 @@ export type InsertLeave = z.infer<typeof insertLeaveSchema>;
 export type Expense = typeof expenses.$inferSelect;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 
-export type UserRole = typeof userRoles.$inferSelect;
+export type MonthlySummary = typeof monthlySummaries.$inferSelect;
+export type InsertMonthlySummary = z.infer<typeof insertMonthlySummarySchema>;
 
-// Request/Response types
-export type CreateTaskRequest = InsertTask;
-export type UpdateTaskRequest = Partial<InsertTask>;
-export type UpdateTaskStatusRequest = { status: Task["status"]; completionLevel?: number };
+export type LoginInput = z.infer<typeof loginSchema>;
 
-export type CreateAttendanceRequest = InsertAttendance;
-export type UpdateAttendanceRequest = Partial<InsertAttendance>;
-
-export type CreateLeaveRequest = InsertLeave;
-export type UpdateLeaveStatusRequest = { status: Leave["status"] };
-
-export type CreateExpenseRequest = InsertExpense;
-export type UpdateExpenseStatusRequest = { status: Expense["status"] };
-
-export type AssignRoleRequest = { userId: string; role: "admin" | "staff" | "proprietor"; department?: string; title?: string };
-
-export type UserWithRole = typeof users.$inferSelect & { role?: string | null; department?: string | null; title?: string | null };
+// Extended types with relations
+export type UserWithOrg = User & { organization?: Organization | null };
+export type TaskWithAssignee = Task & { assignee?: User | null; assigner?: User | null };
+export type LeaveWithUser = Leave & { user?: User | null; approvedBy?: User | null };
+export type ExpenseWithUser = Expense & { user?: User | null; approvedBy?: User | null };
+export type AttendanceWithUser = Attendance & { user?: User | null };
+export type MonthlySummaryWithUser = MonthlySummary & { user?: User | null };

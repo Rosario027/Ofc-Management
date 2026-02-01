@@ -1,10 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { Building2, CheckCircle2, ShieldCheck, Users } from "lucide-react";
-import { Redirect } from "wouter";
-import { useCurrentUser } from "@/hooks/use-users";
+import { Building2, CheckCircle2, ShieldCheck, Users, CheckSquare, ArrowRight } from "lucide-react";
+import { Redirect, Link } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function Landing() {
-  const { data: user, isLoading } = useCurrentUser();
+  const { user, isLoading } = useAuth();
 
   // If already logged in, redirect to dashboard based on role
   if (!isLoading && user) {
@@ -26,12 +26,13 @@ export default function Landing() {
             </span>
           </div>
           <div className="flex items-center gap-4">
-            <Button 
-              onClick={() => window.location.href = "/api/login"}
-              className="font-semibold shadow-lg shadow-primary/20"
-            >
-              Sign In
-            </Button>
+            <Link href="/login">
+              <Button 
+                className="font-semibold shadow-lg shadow-primary/20"
+              >
+                Sign In
+              </Button>
+            </Link>
           </div>
         </div>
       </nav>
@@ -51,20 +52,15 @@ export default function Landing() {
                 The all-in-one platform for task delegation, attendance tracking, leave management, and expense approvals. Simplify your workflow today.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Button 
-                  size="lg" 
-                  onClick={() => window.location.href = "/api/login"}
-                  className="text-lg px-8 py-6 rounded-xl shadow-xl shadow-primary/25 hover:shadow-2xl hover:-translate-y-1 transition-all"
-                >
-                  Get Started
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="lg" 
-                  className="text-lg px-8 py-6 rounded-xl border-2 hover:bg-gray-50"
-                >
-                  View Demo
-                </Button>
+                <Link href="/login">
+                  <Button 
+                    size="lg" 
+                    className="text-lg px-8 py-6 rounded-xl shadow-xl shadow-primary/25 hover:shadow-2xl hover:-translate-y-1 transition-all gap-2"
+                  >
+                    Get Started
+                    <ArrowRight className="w-5 h-5" />
+                  </Button>
+                </Link>
               </div>
               
               <div className="mt-12 flex items-center gap-8 text-sm font-medium text-gray-500">
@@ -105,12 +101,94 @@ export default function Landing() {
                      <h3 className="font-bold text-lg">Task Tracking</h3>
                      <p className="text-gray-500 text-sm">Real-time updates on project progress and deadlines.</p>
                    </div>
+                   <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-100 transform hover:-translate-y-2 transition-transform duration-300">
+                     <Building2 className="w-8 h-8 text-violet-500 mb-3" />
+                     <h3 className="font-bold text-lg">Organizations</h3>
+                     <p className="text-gray-500 text-sm">Manage multiple organizations from one dashboard.</p>
+                   </div>
                  </div>
               </div>
             </div>
           </div>
         </div>
       </section>
+
+      {/* Features Section */}
+      <section className="py-24 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-bold font-display mb-4">Everything you need to manage your office</h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">Powerful features designed for modern workplaces</p>
+          </div>
+          
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+              <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mb-4">
+                <CheckSquare className="w-6 h-6 text-primary" />
+              </div>
+              <h3 className="font-bold text-lg mb-2">Task Management</h3>
+              <p className="text-gray-500 text-sm">Assign tasks, track progress, and manage deadlines with ease.</p>
+            </div>
+            
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-4">
+                <CalendarClock className="w-6 h-6 text-emerald-600" />
+              </div>
+              <h3 className="font-bold text-lg mb-2">Attendance Tracking</h3>
+              <p className="text-gray-500 text-sm">Monitor check-ins, work hours, and attendance patterns.</p>
+            </div>
+            
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+              <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center mb-4">
+                <FileText className="w-6 h-6 text-amber-600" />
+              </div>
+              <h3 className="font-bold text-lg mb-2">Leave Management</h3>
+              <p className="text-gray-500 text-sm">Streamlined leave requests and approval workflows.</p>
+            </div>
+            
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+              <div className="w-12 h-12 bg-violet-100 rounded-xl flex items-center justify-center mb-4">
+                <Wallet className="w-6 h-6 text-violet-600" />
+              </div>
+              <h3 className="font-bold text-lg mb-2">Expense Claims</h3>
+              <p className="text-gray-500 text-sm">Submit and approve expenses with receipt management.</p>
+            </div>
+            
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
+                <Users className="w-6 h-6 text-blue-600" />
+              </div>
+              <h3 className="font-bold text-lg mb-2">Employee Directory</h3>
+              <p className="text-gray-500 text-sm">Complete employee profiles and organizational structure.</p>
+            </div>
+            
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+              <div className="w-12 h-12 bg-rose-100 rounded-xl flex items-center justify-center mb-4">
+                <ShieldCheck className="w-6 h-6 text-rose-600" />
+              </div>
+              <h3 className="font-bold text-lg mb-2">Role-based Access</h3>
+              <p className="text-gray-500 text-sm">Secure permissions for admins, proprietors, and staff.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="py-12 bg-gray-900 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Building2 className="w-6 h-6 text-primary" />
+              <span className="text-xl font-bold font-display">
+                Office<span className="text-primary">Sync</span>
+              </span>
+            </div>
+            <p className="text-gray-400 text-sm">
+              © {new Date().getFullYear()} OfficeSync. All rights reserved.
+            </p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

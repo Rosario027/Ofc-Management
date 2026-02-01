@@ -10,15 +10,31 @@ import { Loader2 } from "lucide-react";
 
 // Pages
 import Landing from "@/pages/Landing";
+import Login from "@/pages/Login";
 import StaffDashboard from "@/pages/staff/StaffDashboard";
 import StaffTasks from "@/pages/staff/StaffTasks";
+import StaffAttendance from "@/pages/staff/StaffAttendance";
+import StaffLeaves from "@/pages/staff/StaffLeaves";
+import StaffExpenses from "@/pages/staff/StaffExpenses";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
+import AdminTasks from "@/pages/admin/AdminTasks";
+import AdminEmployees from "@/pages/admin/AdminEmployees";
+import AdminApprovals from "@/pages/admin/AdminApprovals";
+import AdminAttendance from "@/pages/admin/AdminAttendance";
+import AdminOrganizations from "@/pages/admin/AdminOrganizations";
 import NotFound from "@/pages/not-found";
 
 // Components for handling auth redirects
-function PrivateRoute({ component: Component, allowedRoles }: { component: React.ComponentType, allowedRoles?: string[] }) {
+function PrivateRoute({ 
+  component: Component, 
+  allowedRoles 
+}: { 
+  component: React.ComponentType, 
+  allowedRoles?: string[] 
+}) {
   const { data: user, isLoading } = useCurrentUser();
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const [, navigate] = useLocation();
 
   if (isLoading || isAuthLoading) {
     return (
@@ -29,8 +45,7 @@ function PrivateRoute({ component: Component, allowedRoles }: { component: React
   }
 
   if (!isAuthenticated || !user) {
-    window.location.href = "/api/login";
-    return null;
+    return <Redirect to="/login" />;
   }
 
   if (allowedRoles && user.role && !allowedRoles.includes(user.role)) {
@@ -55,9 +70,12 @@ function PrivateRoute({ component: Component, allowedRoles }: { component: React
 }
 
 function Router() {
+  const { user, isAuthenticated } = useAuth();
+  
   return (
     <Switch>
       <Route path="/" component={Landing} />
+      <Route path="/login" component={Login} />
       
       {/* Staff Routes */}
       <Route path="/dashboard">
@@ -67,16 +85,13 @@ function Router() {
         <PrivateRoute component={StaffTasks} allowedRoles={["staff"]} />
       </Route>
       <Route path="/attendance">
-         {/* Placeholder for now - normally would be StaffAttendance page */}
-         <PrivateRoute component={StaffDashboard} allowedRoles={["staff"]} />
+        <PrivateRoute component={StaffAttendance} allowedRoles={["staff"]} />
       </Route>
       <Route path="/leaves">
-         {/* Placeholder for now */}
-         <PrivateRoute component={StaffDashboard} allowedRoles={["staff"]} />
+        <PrivateRoute component={StaffLeaves} allowedRoles={["staff"]} />
       </Route>
       <Route path="/expenses">
-         {/* Placeholder for now */}
-         <PrivateRoute component={StaffDashboard} allowedRoles={["staff"]} />
+        <PrivateRoute component={StaffExpenses} allowedRoles={["staff"]} />
       </Route>
 
       {/* Admin Routes */}
@@ -84,7 +99,19 @@ function Router() {
         <PrivateRoute component={AdminDashboard} allowedRoles={["admin", "proprietor"]} />
       </Route>
       <Route path="/admin/tasks">
-         <PrivateRoute component={AdminDashboard} allowedRoles={["admin", "proprietor"]} />
+        <PrivateRoute component={AdminTasks} allowedRoles={["admin", "proprietor"]} />
+      </Route>
+      <Route path="/admin/employees">
+        <PrivateRoute component={AdminEmployees} allowedRoles={["admin", "proprietor"]} />
+      </Route>
+      <Route path="/admin/approvals">
+        <PrivateRoute component={AdminApprovals} allowedRoles={["admin", "proprietor"]} />
+      </Route>
+      <Route path="/admin/attendance">
+        <PrivateRoute component={AdminAttendance} allowedRoles={["admin", "proprietor"]} />
+      </Route>
+      <Route path="/admin/organizations">
+        <PrivateRoute component={AdminOrganizations} allowedRoles={["admin", "proprietor"]} />
       </Route>
       
       {/* Fallback */}

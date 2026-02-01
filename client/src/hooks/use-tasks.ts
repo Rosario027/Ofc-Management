@@ -1,6 +1,33 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
-import type { CreateTaskRequest, UpdateTaskRequest, Task } from "@shared/schema";
+import type { InsertTask } from "@shared/schema";
+
+export interface Task {
+  id: number;
+  title: string;
+  description?: string | null;
+  assignedToId: number;
+  assignedById: number;
+  organizationId?: number | null;
+  status: "pending" | "in_progress" | "completed" | "reassigned";
+  priority: "low" | "medium" | "high" | "critical";
+  dueDate?: string | null;
+  completionLevel: number;
+  notes?: string | null;
+  createdAt: string;
+  assignee?: {
+    id: number;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+  assigner?: {
+    id: number;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+}
 
 export function useTasks() {
   return useQuery({
@@ -8,7 +35,7 @@ export function useTasks() {
     queryFn: async () => {
       const res = await fetch(api.tasks.list.path, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch tasks");
-      return api.tasks.list.responses[200].parse(await res.json());
+      return res.json() as Promise<Task[]>;
     },
   });
 }
@@ -16,7 +43,7 @@ export function useTasks() {
 export function useCreateTask() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: CreateTaskRequest) => {
+    mutationFn: async (data: InsertTask) => {
       const res = await fetch(api.tasks.create.path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -28,7 +55,7 @@ export function useCreateTask() {
         const error = await res.json();
         throw new Error(error.message || "Failed to create task");
       }
-      return api.tasks.create.responses[201].parse(await res.json());
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.tasks.list.path] });
@@ -39,7 +66,7 @@ export function useCreateTask() {
 export function useUpdateTask() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...data }: UpdateTaskRequest & { id: number }) => {
+    mutationFn: async ({ id, ...data }: Partial<InsertTask> & { id: number }) => {
       const url = buildUrl(api.tasks.update.path, { id });
       const res = await fetch(url, {
         method: "PATCH",
@@ -52,7 +79,7 @@ export function useUpdateTask() {
         const error = await res.json();
         throw new Error(error.message || "Failed to update task");
       }
-      return api.tasks.update.responses[200].parse(await res.json());
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.tasks.list.path] });

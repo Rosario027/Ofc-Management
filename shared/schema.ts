@@ -228,6 +228,26 @@ export const loginSchema = z.object({
   password: z.string().min(6),
 });
 
+// Profile update schema (users can update their own profile)
+export const updateProfileSchema = z.object({
+  firstName: z.string().min(1, "First name is required").max(100),
+  lastName: z.string().min(1, "Last name is required").max(100),
+  email: z.string().email("Invalid email address"),
+  department: z.string().max(100).optional().nullable(),
+  title: z.string().max(100).optional().nullable(),
+  profileImageUrl: z.string().url().optional().nullable(),
+});
+
+// Password change schema
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: z.string().min(8, "Password must be at least 8 characters"),
+  confirmPassword: z.string().min(1, "Please confirm your password"),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
+});
+
 // === TYPES ===
 export type Organization = typeof organizations.$inferSelect;
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
@@ -251,6 +271,8 @@ export type MonthlySummary = typeof monthlySummaries.$inferSelect;
 export type InsertMonthlySummary = z.infer<typeof insertMonthlySummarySchema>;
 
 export type LoginInput = z.infer<typeof loginSchema>;
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
 // Extended types with relations
 export type UserWithOrg = User & { organization?: Organization | null };

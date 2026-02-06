@@ -458,13 +458,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // === SEED DATA ===
-  // Create default admin user if no users exist
+  // Create default users if no users exist
   const existingUsers = await storage.getUsers();
   if (existingUsers.length === 0) {
-    console.log("Creating default admin user...");
+    console.log("Creating default users...");
+    
+    // Create default admin user
     await storage.createUser({
-      email: "admin@officesync.com",
-      password: "admin123",
+      email: "admin",
+      password: "admin",
       firstName: "Admin",
       lastName: "User",
       role: "admin",
@@ -472,7 +474,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       title: "Administrator",
       isActive: true,
     });
-    console.log("Default admin created: admin@officesync.com / admin123");
+    console.log("Default admin created: admin / admin");
+    
+    // Create default regular user
+    await storage.createUser({
+      email: "user",
+      password: "user",
+      firstName: "Regular",
+      lastName: "User",
+      role: "staff",
+      department: "General",
+      title: "Staff Member",
+      isActive: true,
+    });
+    console.log("Default user created: user / user");
   }
 
   return httpServer;

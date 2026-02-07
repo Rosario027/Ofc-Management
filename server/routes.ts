@@ -535,7 +535,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Create default admin user
     await storage.createUser({
       email: "admin",
-      password: "admin",
+      password: "admin123",
       firstName: "Admin",
       lastName: "User",
       role: "admin",
@@ -543,12 +543,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       title: "Administrator",
       isActive: true,
     });
-    console.log("Default admin created: admin / admin");
+    console.log("Default admin created: admin / admin123");
     
     // Create default regular user
     await storage.createUser({
       email: "user",
-      password: "user",
+      password: "user123",
       firstName: "Regular",
       lastName: "User",
       role: "staff",
@@ -556,7 +556,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       title: "Staff Member",
       isActive: true,
     });
-    console.log("Default user created: user / user");
+    console.log("Default user created: user / user123");
   }
 
   return httpServer;

@@ -13,7 +13,8 @@ import {
   LogOut,
   Building2,
   ClipboardCheck,
-  Settings
+  Settings,
+  UserCircle
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -98,14 +99,29 @@ export function Sidebar() {
           </div>
         </div>
         
-        <Button 
-          variant="outline" 
-          className="w-full justify-start text-muted-foreground hover:text-destructive"
-          onClick={() => logout()}
-        >
-          <LogOut className="w-4 h-4 mr-2" />
-          Log Out
-        </Button>
+        <div className="space-y-1">
+          <Link 
+            href={isAdmin ? "/admin/profile" : "/profile"}
+            className={cn(
+              "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+              location === "/profile" || location === "/admin/profile"
+                ? "bg-primary/10 text-primary" 
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            <UserCircle className="w-4 h-4" />
+            Profile Settings
+          </Link>
+          
+          <Button 
+            variant="outline" 
+            className="w-full justify-start text-muted-foreground hover:text-destructive"
+            onClick={() => logout()}
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Log Out
+          </Button>
+        </div>
       </div>
     </div>
   );

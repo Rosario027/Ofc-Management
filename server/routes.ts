@@ -109,6 +109,75 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  app.patch(api.auth.updateProfile.path, requireAuth, async (req, res) => {
+    try {
+      const input = api.auth.updateProfile.input.parse(req.body);
+      const userId = req.session!.userId!;
+      
+      // Check if email is already taken by another user
+      const existingUser = await storage.getUserByEmail(input.email);
+      if (existingUser && existingUser.id !== userId) {
+        return res.status(400).json({ message: "Email is already in use" });
+      }
+
+      const user = await storage.updateUser(userId, {
+        firstName: input.firstName,
+        lastName: input.lastName,
+        email: input.email,
+        department: input.department,
+        title: input.title,
+        profileImageUrl: input.profileImageUrl,
+      });
+
+      res.json({
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        profileImageUrl: user.profileImageUrl,
+        role: user.role,
+        department: user.department,
+        title: user.title,
+        organizationId: user.organizationId,
+        isActive: user.isActive,
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.post(api.auth.changePassword.path, requireAuth, async (req, res) => {
+    try {
+      const input = api.auth.changePassword.input.parse(req.body);
+      const userId = req.session!.userId!;
+      
+      // Get current user with password
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+
+      // Verify current password
+      const isValidPassword = await verifyPassword(input.currentPassword, user.password);
+      if (!isValidPassword) {
+        return res.status(400).json({ message: "Current password is incorrect" });
+      }
+
+      // Update password
+      await storage.updateUser(userId, { password: input.newPassword });
+
+      res.json({ message: "Password changed successfully" });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
   // === ORGANIZATION ROUTES ===
   app.get(api.organizations.list.path, requireAuth, async (req, res) => {
     const orgs = await storage.getOrganizations();

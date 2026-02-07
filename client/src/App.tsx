@@ -11,6 +11,7 @@ import { Loader2 } from "lucide-react";
 // Pages
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
+import Profile from "@/pages/Profile";
 import StaffDashboard from "@/pages/staff/StaffDashboard";
 import StaffTasks from "@/pages/staff/StaffTasks";
 import StaffAttendance from "@/pages/staff/StaffAttendance";
@@ -93,6 +94,9 @@ function Router() {
       <Route path="/expenses">
         <PrivateRoute component={StaffExpenses} allowedRoles={["staff"]} />
       </Route>
+      <Route path="/profile">
+        <PrivateRoute component={Profile} />
+      </Route>
 
       {/* Admin Routes */}
       <Route path="/admin">
@@ -112,6 +116,9 @@ function Router() {
       </Route>
       <Route path="/admin/organizations">
         <PrivateRoute component={AdminOrganizations} allowedRoles={["admin", "proprietor"]} />
+      </Route>
+      <Route path="/admin/profile">
+        <PrivateRoute component={Profile} allowedRoles={["admin", "proprietor"]} />
       </Route>
       
       {/* Fallback */}

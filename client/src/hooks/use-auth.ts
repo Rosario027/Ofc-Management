@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/routes";
-import type { LoginInput } from "@shared/schema";
+import type { LoginInput, UpdateProfileInput, ChangePasswordInput } from "@shared/schema";
 
 export interface AuthUser {
   id: number;
@@ -58,6 +58,38 @@ async function logoutUser(): Promise<void> {
   }
 }
 
+async function updateProfile(data: UpdateProfileInput): Promise<AuthUser> {
+  const res = await fetch(api.auth.updateProfile.path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.message || "Failed to update profile");
+  }
+
+  return res.json();
+}
+
+async function changePassword(data: ChangePasswordInput): Promise<{ message: string }> {
+  const res = await fetch(api.auth.changePassword.path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.message || "Failed to change password");
+  }
+
+  return res.json();
+}
+
 export function useAuth() {
   const queryClient = useQueryClient();
 
@@ -83,14 +115,31 @@ export function useAuth() {
     },
   });
 
+  const updateProfileMutation = useMutation({
+    mutationFn: updateProfile,
+    onSuccess: (data) => {
+      queryClient.setQueryData(["auth", "me"], data);
+    },
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: changePassword,
+  });
+
   return {
     user,
     isLoading,
     isAuthenticated: !!user,
     login: loginMutation.mutateAsync,
     logout: logoutMutation.mutate,
+    updateProfile: updateProfileMutation.mutateAsync,
+    changePassword: changePasswordMutation.mutateAsync,
     isLoggingIn: loginMutation.isPending,
     isLoggingOut: logoutMutation.isPending,
+    isUpdatingProfile: updateProfileMutation.isPending,
+    isChangingPassword: changePasswordMutation.isPending,
     loginError: loginMutation.error,
+    updateProfileError: updateProfileMutation.error,
+    changePasswordError: changePasswordMutation.error,
   };
 }

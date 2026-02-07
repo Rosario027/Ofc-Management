@@ -47,11 +47,11 @@ export default function Login() {
               )}
               
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Email or Username</Label>
                 <Input
                   id="email"
-                  type="email"
-                  placeholder="you@company.com"
+                  type="text"
+                  placeholder="admin"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -98,7 +98,8 @@ export default function Login() {
 
             <div className="mt-6 p-4 bg-muted rounded-lg text-sm text-muted-foreground">
               <p className="font-medium mb-2">Demo Credentials:</p>
-              <p>Admin: admin@officesync.com / admin123</p>
+              <p>Admin: admin / admin123</p>
+              <p>User: user / user123</p>
             </div>
           </CardContent>
         </Card>

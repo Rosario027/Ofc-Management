@@ -74,6 +74,7 @@ In your Railway project dashboard, add the following environment variables:
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host:5432/db` |
+| `DATABASE_SSL` | Enable SSL for hosted databases (recommended for production) | `true` |
 | `SESSION_SECRET` | Secret key for session encryption | `your-secret-key-here` |
 | `NODE_ENV` | Environment mode | `production` |
 
@@ -91,10 +92,10 @@ railway run npm run db:push
 
 ### Step 5: Access the Application
 
-Once deployed, Railway will provide a URL for your application. Access it and log in with the default admin credentials:
+Once deployed, Railway will provide a URL for your application. Access it and log in with the default credentials:
 
-- **Email**: admin@officesync.com
-- **Password**: admin123
+- **Admin**: admin / admin123
+- **User**: user / user123
 
 **Important**: Change the default admin password after first login!
 
@@ -141,8 +142,11 @@ The application will be available at `http://localhost:5000`
 After initial setup, you can log in with:
 
 - **Admin Account**:
-  - Email: admin@officesync.com
+  - Email/Username: admin
   - Password: admin123
+- **User Account**:
+  - Email/Username: user
+  - Password: user123
 
 ## Project Structure
 

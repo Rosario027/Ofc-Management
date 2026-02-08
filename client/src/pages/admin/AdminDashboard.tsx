@@ -1,9 +1,10 @@
-import { useCurrentUser, useUsers } from "@/hooks/use-users";
+import { useCurrentUser, useUsers, type User } from "@/hooks/use-users";
 
-import { useTasks } from "@/hooks/use-tasks";
-import { useAttendance } from "@/hooks/use-attendance";
+import { useTasks, type Task } from "@/hooks/use-tasks";
+import { useAttendance, type Attendance } from "@/hooks/use-attendance";
 import { useLeaves } from "@/hooks/use-leaves";
 import { useExpenses } from "@/hooks/use-expenses";
+import type { LeaveWithUser, ExpenseWithUser } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Users, Briefcase, CalendarCheck, TrendingUp, Building2, CheckCircle, Clock, AlertCircle } from "lucide-react";
@@ -24,31 +25,31 @@ export default function AdminDashboard() {
   const isLoading = usersLoading || tasksLoading;
 
   // Filter by organization if set
-  const orgUsers = users?.filter(u => !user?.organizationId || u.organizationId === user.organizationId) || [];
-  const orgTasks = tasks?.filter(t => !user?.organizationId || t.organizationId === user.organizationId) || [];
-  const orgAttendance = attendance?.filter(a => !user?.organizationId || a.organizationId === user.organizationId) || [];
-  const pendingLeaves = leaves?.filter(l => l.status === "pending" && (!user?.organizationId || l.organizationId === user.organizationId)).length || 0;
-  const pendingExpenses = expenses?.filter(e => e.status === "pending" && (!user?.organizationId || e.organizationId === user.organizationId)).length || 0;
+  const orgUsers = users?.filter((u: User) => !user?.organizationId || u.organizationId === user.organizationId) || [];
+  const orgTasks = tasks?.filter((t: Task) => !user?.organizationId || t.organizationId === user.organizationId) || [];
+  const orgAttendance = attendance?.filter((a: Attendance) => !user?.organizationId || a.organizationId === user.organizationId) || [];
+  const pendingLeaves = leaves?.filter((l: LeaveWithUser) => l.status === "pending" && (!user?.organizationId || l.organizationId === user.organizationId)).length || 0;
+  const pendingExpenses = expenses?.filter((e: ExpenseWithUser) => e.status === "pending" && (!user?.organizationId || e.organizationId === user.organizationId)).length || 0;
 
   // Task stats
   const totalTasks = orgTasks.length;
-  const completedTasks = orgTasks.filter(t => t.status === "completed").length;
-  const inProgressTasks = orgTasks.filter(t => t.status === "in_progress").length;
-  const pendingTasks = orgTasks.filter(t => t.status === "pending").length;
+  const completedTasks = orgTasks.filter((t: Task) => t.status === "completed").length;
+  const inProgressTasks = orgTasks.filter((t: Task) => t.status === "in_progress").length;
+  const pendingTasks = orgTasks.filter((t: Task) => t.status === "pending").length;
 
   // Attendance stats (today)
   const today = new Date().toISOString().split('T')[0];
-  const todayAttendance = orgAttendance.filter(a => a.date === today);
-  const presentToday = todayAttendance.filter(a => a.status === "present").length;
-  const absentToday = todayAttendance.filter(a => a.status === "absent").length;
-  const onLeaveToday = todayAttendance.filter(a => a.status === "leave").length;
+  const todayAttendance = orgAttendance.filter((a: Attendance) => a.date === today);
+  const presentToday = todayAttendance.filter((a: Attendance) => a.status === "present").length;
+  const absentToday = todayAttendance.filter((a: Attendance) => a.status === "absent").length;
+  const onLeaveToday = todayAttendance.filter((a: Attendance) => a.status === "leave").length;
 
   // Task priority distribution
   const taskPriorityData = [
-    { name: "Critical", value: orgTasks.filter(t => t.priority === "critical" && t.status !== "completed").length, color: "#ef4444" },
-    { name: "High", value: orgTasks.filter(t => t.priority === "high" && t.status !== "completed").length, color: "#f97316" },
-    { name: "Medium", value: orgTasks.filter(t => t.priority === "medium" && t.status !== "completed").length, color: "#3b82f6" },
-    { name: "Low", value: orgTasks.filter(t => t.priority === "low" && t.status !== "completed").length, color: "#22c55e" },
+    { name: "Critical", value: orgTasks.filter((t: Task) => t.priority === "critical" && t.status !== "completed").length, color: "#ef4444" },
+    { name: "High", value: orgTasks.filter((t: Task) => t.priority === "high" && t.status !== "completed").length, color: "#f97316" },
+    { name: "Medium", value: orgTasks.filter((t: Task) => t.priority === "medium" && t.status !== "completed").length, color: "#3b82f6" },
+    { name: "Low", value: orgTasks.filter((t: Task) => t.priority === "low" && t.status !== "completed").length, color: "#22c55e" },
   ].filter(d => d.value > 0);
 
   // Weekly attendance data
@@ -58,8 +59,8 @@ export default function AdminDashboard() {
     const dateStr = d.toISOString().split('T')[0];
     const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
 
-    const dayAttendance = orgAttendance.filter(a => a.date === dateStr);
-    const present = dayAttendance.filter(a => a.status === "present" || a.status === "half_day").length;
+    const dayAttendance = orgAttendance.filter((a: Attendance) => a.date === dateStr);
+    const present = dayAttendance.filter((a: Attendance) => a.status === "present" || a.status === "half_day").length;
     // Assume total employees - present = absent (simplification)
     const absent = Math.max(0, orgUsers.length - present);
 
@@ -173,7 +174,7 @@ export default function AdminDashboard() {
               <Users className="w-5 h-5 text-violet-600" />
               <span className="text-sm text-violet-700">Staff</span>
             </div>
-            <p className="text-2xl font-bold text-violet-800 mt-2">{orgUsers.filter(u => u.role === "staff").length}</p>
+            <p className="text-2xl font-bold text-violet-800 mt-2">{orgUsers.filter((u: User) => u.role === "staff").length}</p>
           </CardContent>
         </Card>
       </div>
@@ -257,9 +258,9 @@ export default function AdminDashboard() {
         <CardContent>
           <div className="space-y-4">
             {orgTasks
-              ?.filter(t => (t.priority === "critical" || t.priority === "high") && t.status !== "completed")
+              ?.filter((t: Task) => (t.priority === "critical" || t.priority === "high") && t.status !== "completed")
               .slice(0, 5)
-              .map(task => (
+              .map((task: Task) => (
                 <div key={task.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/50">
                   <div className="flex items-center gap-3">
                     <div className={`w-2 h-2 rounded-full ${task.priority === "critical" ? "bg-red-500" : "bg-orange-500"}`} />
@@ -274,7 +275,7 @@ export default function AdminDashboard() {
                   <StatusBadge status={task.status} className="text-xs" />
                 </div>
               ))}
-            {!orgTasks?.filter(t => (t.priority === "critical" || t.priority === "high") && t.status !== "completed").length && (
+            {!orgTasks?.filter((t: Task) => (t.priority === "critical" || t.priority === "high") && t.status !== "completed").length && (
               <p className="text-muted-foreground text-center py-4">No critical tasks.</p>
             )}
           </div>

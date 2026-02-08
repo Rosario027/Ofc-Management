@@ -1,4 +1,4 @@
-import { useCurrentUser } from "@/hooks/use-users";
+import { useCurrentUser, useUsers } from "@/hooks/use-users";
 
 import { useTasks } from "@/hooks/use-tasks";
 import { useAttendance } from "@/hooks/use-attendance";
